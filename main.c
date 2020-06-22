@@ -1,17 +1,18 @@
 #include <efi.h>
 #include <efilib.h>
 
+EFI_GRAPHICS_OUTPUT_PROTOCOL **graphics_output;
 EFI_GRAPHICS_OUTPUT_BLT_PIXEL *screen;
-EFI_GRAPHICS_OUTPUT_PROTOCOL *GraphicsOutput;
-EFI_HANDLE *HandleBuffer;
+EFI_HANDLE *handle_buffer;
 EFI_INPUT_KEY key;
 EFI_EVENT key_event;
+EFI_STATUS status;
 UINTN index_;
-UINTN HandleCount;
+UINTN handle_count;
 
-UINTN field[20][25];
-UINTN width = 20;
-UINTN height = 25;
+UINTN **field; 
+UINTN field_width = 20;
+UINTN field_height = 25;
 
 UINTN screen_x;
 UINTN screen_y;
@@ -62,20 +63,26 @@ struct Point
 
 VOID clear_field()
 {
-	for(UINTN i = 0; i < height; i++)
+	for(UINTN i = 0; i < field_height; ++i)
 	{
-		for(UINTN j = 0; j < width; j++) field[j][i] = 0;
+		for(UINTN j = 0; j < field_width; ++j) field[j][i] = 0;
 	}
 }
 
 VOID render()
 {
-	GraphicsOutput->Blt(GraphicsOutput, screen, EfiBltBufferToVideo, 0, 0, screen_x, screen_y, screen_width, screen_height, 0);
+	for(UINTN i = 0; i < handle_count; ++i)
+	{
+		screen_x = graphics_output[i]->Mode->Info->HorizontalResolution / 2 - screen_width / 2;
+		screen_y = graphics_output[i]->Mode->Info->VerticalResolution / 2 - screen_height / 2;
+		
+		graphics_output[i]->Blt(graphics_output[i], screen, EfiBltBufferToVideo, 0, 0, screen_x, screen_y, screen_width, screen_height, 0);
+	}
 }
 
 VOID clear_screen()
 {
-	for(UINTN i = 0; i < screen_width * screen_height; i++)
+	for(UINTN i = 0; i < screen_width * screen_height; ++i)
 	{
 		screen[i].Red = color[background][0];
 		screen[i].Green = color[background][1];
@@ -87,27 +94,36 @@ VOID clear_screen()
 VOID draw_border()
 {
 	UINTN size = (screen_width + border_width * 2) * (screen_height + border_width * 2);
-	EFI_GRAPHICS_OUTPUT_BLT_PIXEL border[size];
+	EFI_GRAPHICS_OUTPUT_BLT_PIXEL *border;
+
+	gBS->AllocatePool(EfiBootServicesData, size * sizeof(EFI_GRAPHICS_OUTPUT_BLT_PIXEL), (VOID **)&border);
 	
-	for(UINTN i = 0; i < size; i++)
+	for(UINTN i = 0; i < size; ++i)
 	{
 		border[i].Blue = color[border_color][0];
 		border[i].Green = color[border_color][1];
 		border[i].Red = color[border_color][2];
 		border[i].Reserved = 0x00;
 	}
+	
+	for(UINTN i = 0; i < handle_count; ++i)
+	{
+		screen_x = graphics_output[i]->Mode->Info->HorizontalResolution / 2 - screen_width / 2;
+		screen_y = graphics_output[i]->Mode->Info->VerticalResolution / 2 - screen_height / 2;
 
-	GraphicsOutput->Blt(GraphicsOutput, border, EfiBltBufferToVideo, 0, 0,
-		screen_x - border_width, screen_y - border_width,screen_width + border_width * 2, screen_height + border_width * 2, 0);
+		graphics_output[i]->Blt(graphics_output[i], border, EfiBltBufferToVideo, 0, 0, screen_x - border_width, screen_y - border_width, screen_width + border_width * 2, screen_height + border_width * 2, 0);	
+	}
+
+	gBS->FreePool(border);
 }
 
 VOID draw_block(UINTN x, UINTN y, UINTN block_color)
 {
 	UINTN pos = 0;
 	
-	for(UINTN i = 0; i < block_width; i++)
+	for(UINTN i = 0; i < block_width; ++i)
 	{
-		for(UINTN j = 0; j < block_width; j++)
+		for(UINTN j = 0; j < block_width; ++j)
 		{
 			pos = (y * block_width + i) * screen_width + (x * block_width + j);
 
@@ -121,22 +137,23 @@ VOID draw_block(UINTN x, UINTN y, UINTN block_color)
 
 UINTN collision()
 {
-	for(UINTN i = 0; i < 4; i++)
+	for(UINTN i = 0; i < 4; ++i)
 	{
-		if((point[i].x >= width || point[i].y >= height) 
+		if((point[i].x >= field_width || point[i].y >= field_height) 
 			|| (field[point[i].x][point[i].y])) return 1;	
 	}
+
 	return 0;
 }
 
 VOID restore_previous()
 {
-	for(UINTN i = 0; i < 4; i++) point[i] = temp[i];
+	for(UINTN i = 0; i < 4; ++i) point[i] = temp[i];
 }
 
 VOID generate_tetronimo()
 {
-	for(UINTN i = 0; i < 4; i++)
+	for(UINTN i = 0; i < 4; ++i)
 	{
 		point[i].x = tetronimo[tetronimo_type][i] % 2 + screen_x / block_width - 1;
 		point[i].y = tetronimo[tetronimo_type][i] / 2;
@@ -147,31 +164,31 @@ VOID generate_tetronimo()
 
 VOID draw_tetromino()
 {
-	for(UINTN i = 0; i < height; i++)
+	for(UINTN i = 0; i < field_height; ++i)
 	{
-		for(UINTN j = 0; j < width; j++)
+		for(UINTN j = 0; j < field_width; ++j)
 		{
 			if(field[j][i] == 0) continue;
 			draw_block(j, i, field[j][i]);
 		}
 	}
 
-	for(UINTN i = 0; i < 4; i++) draw_block(point[i].x, point[i].y, tetronimo_color);
+	for(UINTN i = 0; i < 4; ++i) draw_block(point[i].x, point[i].y, tetronimo_color);
 }
 
 VOID check_line()
 {
-	UINTN k = height - 1;
+	UINTN k = field_height - 1;
 	
-	for(UINTN i = height - 1; i > 0; i--)
+	for(UINTN i = field_height - 1; i > 0; i--)
 	{
 		UINTN count = 0;
-		for(UINTN j = 0; j < width; j++)
+		for(UINTN j = 0; j < field_width; ++j)
 		{
 			if(field[j][i]) count++;
 			field[j][k] = field[j][i];
 		}
-		if(count < width) k--;
+		if(count < field_width) k--;
 	}
 }
 
@@ -180,7 +197,7 @@ VOID move(INTN x, INTN y)
 	dx = x;
 	dy = y;
 	
-	for(UINTN i = 0; i < 4; i++)
+	for(UINTN i = 0; i < 4; ++i)
 	{
 		temp[i] = point[i];
 		point[i].x += dx;
@@ -191,7 +208,7 @@ VOID move(INTN x, INTN y)
 	{
 		if(collision())
 		{
-			for(UINTN i = 0; i < 4; i++) field[temp[i].x][temp[i].y] = tetronimo_color;
+			for(UINTN i = 0; i < 4; ++i) field[temp[i].x][temp[i].y] = tetronimo_color;
 			generate_tetronimo();
 
 			tetronimo_color++;
@@ -208,7 +225,7 @@ VOID move(INTN x, INTN y)
 VOID rotate()
 {
 	struct Point center = point[1];
-	for(UINTN i = 0; i < 4; i++)
+	for(UINTN i = 0; i < 4; ++i)
 	{
 		UINTN temp_x = point[i].y - center.y;
 		UINTN temp_y = point[i].x - center.x;
@@ -223,21 +240,31 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 {
 	InitializeLib(ImageHandle, SystemTable);
 	gST->ConOut->ClearScreen(gST->ConOut);
-	
-	gBS->AllocatePool(EfiBootServicesData, screen_width*screen_height * sizeof(EFI_GRAPHICS_OUTPUT_BLT_PIXEL), (VOID **)&screen);
-	
-	EFI_STATUS Status = gST->BootServices->LocateHandleBuffer(ByProtocol, &gEfiGraphicsOutputProtocolGuid, NULL, &HandleCount, &HandleBuffer);
-	if(EFI_ERROR(Status)) return EFI_UNSUPPORTED;
 
-	for (UINTN i = 0; i < HandleCount; i++)
+	status = gBS->AllocatePool(EfiBootServicesData, screen_width * screen_height * sizeof(EFI_GRAPHICS_OUTPUT_BLT_PIXEL), (VOID **)&screen);
+	if(EFI_ERROR(status)) return EFI_OUT_OF_RESOURCES;
+
+	status = gST->BootServices->LocateHandleBuffer(ByProtocol, &gEfiGraphicsOutputProtocolGuid, NULL, &handle_count, &handle_buffer);
+	if(EFI_ERROR(status)) return EFI_UNSUPPORTED;
+	
+	status = gBS->AllocatePool(EfiBootServicesData, handle_count * sizeof(EFI_GRAPHICS_OUTPUT_PROTOCOL), (VOID **)&graphics_output);
+	if(EFI_ERROR(status)) return EFI_OUT_OF_RESOURCES;
+
+	for (UINTN i = 0; i < handle_count; ++i)
 	{
-		gST->BootServices->HandleProtocol(HandleBuffer[i], &gEfiGraphicsOutputProtocolGuid, (void **)&GraphicsOutput);
+		gST->BootServices->HandleProtocol(handle_buffer[i], &gEfiGraphicsOutputProtocolGuid, (VOID **)&graphics_output[i]);
 	}
+	
+	status = gBS->AllocatePool(EfiBootServicesData, field_height * sizeof(UINTN), (VOID **)&field);
+	if(EFI_ERROR(status)) return EFI_OUT_OF_RESOURCES;
 
-	screen_x = GraphicsOutput->Mode->Info->HorizontalResolution / 2 - screen_width / 2;
-	screen_y = GraphicsOutput->Mode->Info->VerticalResolution / 2 - screen_height / 2;
-
-	draw_border();	
+	for(UINTN i = 0; i < field_height; ++i)
+	{
+		status = gBS->AllocatePool(EfiBootServicesData, field_width * sizeof(UINTN), (VOID **)&field[i]);
+		if(EFI_ERROR(status)) return EFI_OUT_OF_RESOURCES;
+	}
+	
+	draw_border();
 	clear_field();
 	generate_tetronimo();
 
@@ -266,6 +293,10 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 	}
 
 	gBS->FreePool(screen);
+	gBS->FreePool(graphics_output);
+
+	for(UINTN i = 0; i < field_height; ++i) gBS->FreePool(field[i]);
+	gBS->FreePool(field);	
 
 	return EFI_SUCCESS;
 }

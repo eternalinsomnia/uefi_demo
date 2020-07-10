@@ -180,15 +180,15 @@ VOID check_line()
 {
 	UINTN k = field_height - 1;
 	
-	for(UINTN i = field_height - 1; i > 0; i--)
+	for(UINTN i = field_height - 1; i > 0; --i)
 	{
 		UINTN count = 0;
 		for(UINTN j = 0; j < field_width; ++j)
 		{
-			if(field[j][i]) count++;
+			if(field[j][i]) ++count;
 			field[j][k] = field[j][i];
 		}
-		if(count < field_width) k--;
+		if(count < field_width) --k;
 	}
 }
 
@@ -211,7 +211,7 @@ VOID move(INTN x, INTN y)
 			for(UINTN i = 0; i < 4; ++i) field[temp[i].x][temp[i].y] = tetronimo_color;
 			generate_tetronimo();
 
-			tetronimo_color++;
+			++tetronimo_color;
 			if(tetronimo_color == 9) tetronimo_color = 1;
 		}	
 	}
@@ -288,7 +288,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 		dx = 0;
 		dy = 0;
 		
-		tetronimo_type++;
+		++tetronimo_type;
 		if(tetronimo_type == 7) tetronimo_type = 0;
 	}
 

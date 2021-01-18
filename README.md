@@ -9,18 +9,16 @@ $ make
 # Launch
 ## QEMU
 ```
-$ apt-get install qemu ovmf
+$ apt-get install qemu ovmf gnu-efi
 $ qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -net none -drive format=raw,file=fat:rw:~/uefi_tetris/  
 Shell> fs0:tetris.efi
 ```
-## VirtualBox/VMWare Workstation
-### Create ISO
+## Create a bootable usb drive
 ```
-$ fallocate -l 64M image.iso
-$ mkfs.vfat -F32 image.iso
+$ mkfs.vfat -F32 /dev/sdx
 $ mkdir -p mnt
-$ mount image.iso mnt/
+$ mount /dev/sdx mnt/
 $ mkdir -p mnt/EFI/BOOT
 $ cp tetris.efi mnt/EFI/BOOT/BOOTx64.EFI
-$ umount image.iso
+$ umount mnt 
 ```

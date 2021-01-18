@@ -9,7 +9,7 @@ $ make
 # Launch
 ## QEMU
 ```
-$ apt-get install qemu ovmf gnu-efi
+$ apt install qemu ovmf gnu-efi
 $ qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -net none -drive format=raw,file=fat:rw:~/uefi_tetris/  
 Shell> fs0:tetris.efi
 ```
